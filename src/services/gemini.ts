@@ -18,8 +18,8 @@ export const extractQuestionsFromPdf = async (
     };
   }
 
-  // Model endpoint - gemini-2.5-flash or gemini-1.5-flash (Google AI Studio)
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
+  // Model endpoint - gemini-3.8-flash (Google AI Studio)
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey.trim()}`;
 
   const prompt = `
 Bạn là một chuyên gia khảo thí và số hóa đề thi Toán học Việt Nam.
