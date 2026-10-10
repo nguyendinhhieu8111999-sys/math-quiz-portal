@@ -1,0 +1,418 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Exam, Question, Submission, Student } from '../../types';
+import { MathRenderer } from '../common/MathRenderer';
+import {
+  Clock,
+  Flag,
+  CheckCircle,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Send,
+  HelpCircle,
+} from 'lucide-react';
+
+interface ExamRoomProps {
+  exam: Exam;
+  student: Student;
+  onSubmitExam: (submission: Submission) => void;
+  onExit: () => void;
+}
+
+interface QuestionWithMeta extends Question {
+  originalIndex: number;
+  shuffledOptions: { text: string; originalIdx: number }[];
+}
+
+export const ExamRoom: React.FC<ExamRoomProps> = ({
+  exam,
+  student,
+  onSubmitExam,
+  onExit,
+}) => {
+  // Timer state in seconds
+  const [secondsLeft, setSecondsLeft] = useState<number>(() => exam.durationMinutes * 60);
+  const [currentQIndex, setCurrentQIndex] = useState<number>(0);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [flagged, setFlagged] = useState<Record<string, boolean>>({});
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [startTime] = useState<number>(() => Date.now());
+
+  // Shuffled questions setup
+  const preparedQuestions: QuestionWithMeta[] = useMemo(() => {
+    let list = exam.questions.map((q, idx) => ({
+      ...q,
+      originalIndex: idx,
+      shuffledOptions: q.options.map((opt, optIdx) => ({
+        text: opt,
+        originalIdx: optIdx,
+      })),
+    }));
+
+    // Shuffle options if enabled
+    if (exam.shuffleOptions) {
+      list = list.map((q) => {
+        const shuffled = [...q.shuffledOptions].sort(() => Math.random() - 0.5);
+        return { ...q, shuffledOptions: shuffled };
+      });
+    }
+
+    // Shuffle question order if enabled
+    if (exam.shuffleQuestions) {
+      list = [...list].sort(() => Math.random() - 0.5);
+    }
+
+    return list;
+  }, [exam]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (secondsLeft <= 0) {
+      handleFinalSubmit();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleFinalSubmit();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [secondsLeft]);
+
+  // Format MM:SS
+  const formatTime = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleSelectOption = (questionId: string, originalOptionIdx: number) => {
+    setAnswers((prev) => ({
+      ...prev,
+      [questionId]: originalOptionIdx,
+    }));
+  };
+
+  const toggleFlag = (questionId: string) => {
+    setFlagged((prev) => ({
+      ...prev,
+      [questionId]: !prev[questionId],
+    }));
+  };
+
+  const handleFinalSubmit = () => {
+    setIsSubmitModalOpen(false);
+
+    // Calculate score
+    let correctCount = 0;
+    preparedQuestions.forEach((q) => {
+      if (answers[q.id] === q.correctAnswer) {
+        correctCount++;
+      }
+    });
+
+    const totalCount = preparedQuestions.length;
+    const score = totalCount > 0 ? (correctCount / totalCount) * 10 : 0;
+    const timeSpentSeconds = Math.round((Date.now() - startTime) / 1000);
+
+    const submission: Submission = {
+      id: `sub_${Date.now()}_${student.studentId}`,
+      examId: exam.id,
+      examTitle: exam.title,
+      studentId: student.studentId,
+      studentName: student.fullName,
+      studentClass: student.className,
+      answers,
+      score: Math.round(score * 100) / 100, // Round to 2 decimals
+      correctCount,
+      totalCount,
+      submittedAt: new Date().toISOString(),
+      timeSpentSeconds,
+      syncedToSheet: false,
+    };
+
+    onSubmitExam(submission);
+  };
+
+  const currentQ = preparedQuestions[currentQIndex];
+  const answeredCount = Object.keys(answers).length;
+  const isTimeCritical = secondsLeft < 300; // Under 5 minutes
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col">
+      {/* Sticky Exam Room Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="font-extrabold text-indigo-700 text-sm hidden sm:inline">
+              {exam.title}
+            </span>
+            <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md font-medium">
+              Thí sinh: <strong>{student.fullName}</strong> ({student.studentId} - {student.className})
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            {/* Countdown Badge */}
+            <div
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl font-mono text-sm font-bold border ${
+                isTimeCritical
+                  ? 'bg-rose-50 text-rose-600 border-rose-300 animate-pulse'
+                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>{formatTime(secondsLeft)}</span>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              onClick={() => setIsSubmitModalOpen(true)}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-600/20 transition"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Nộp Bài ({answeredCount}/{preparedQuestions.length})</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Workspace */}
+      <div className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Left 3 Columns: Active Question Card */}
+        <div className="lg:col-span-3 flex flex-col space-y-4">
+          {currentQ && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col flex-1">
+              {/* Question Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div className="flex items-center space-x-2">
+                  <span className="bg-indigo-600 text-white font-extrabold text-xs px-3 py-1 rounded-lg">
+                    Câu {currentQIndex + 1}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    / {preparedQuestions.length} câu
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => toggleFlag(currentQ.id)}
+                  className={`flex items-center space-x-1 px-3 py-1 rounded-lg text-xs font-medium border transition ${
+                    flagged[currentQ.id]
+                      ? 'bg-amber-100 border-amber-300 text-amber-800'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>{flagged[currentQ.id] ? 'Đã cắm cờ' : 'Đặt cờ xem lại'}</span>
+                </button>
+              </div>
+
+              {/* Question Content */}
+              <div className="text-base text-slate-800 leading-relaxed font-medium mb-4 select-none">
+                <MathRenderer content={currentQ.text} />
+              </div>
+
+              {/* Attached Geometry Diagram / Image */}
+              {currentQ.imageUrl && (
+                <div className="my-3 max-w-lg p-2 bg-slate-50 rounded-xl border border-slate-200 self-center">
+                  <img
+                    src={currentQ.imageUrl}
+                    alt={`Hình minh họa câu ${currentQIndex + 1}`}
+                    className="max-h-72 object-contain rounded-lg"
+                  />
+                </div>
+              )}
+
+              {/* Options Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 mb-6">
+                {currentQ.shuffledOptions.map((opt, optIdx) => {
+                  const letter = ['A', 'B', 'C', 'D'][optIdx];
+                  const isSelected = answers[currentQ.id] === opt.originalIdx;
+
+                  return (
+                    <button
+                      key={optIdx}
+                      type="button"
+                      onClick={() => handleSelectOption(currentQ.id, opt.originalIdx)}
+                      className={`p-4 rounded-xl border-2 text-left flex items-start space-x-3 transition-all ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white'
+                            : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'
+                        }`}
+                      >
+                        {letter}
+                      </div>
+                      <div className="text-sm font-medium pt-0.5 flex-1 select-none">
+                        <MathRenderer content={opt.text} inline />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Question Navigation Controls */}
+              <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  disabled={currentQIndex === 0}
+                  onClick={() => setCurrentQIndex((i) => Math.max(0, i - 1))}
+                  className="flex items-center space-x-1.5 px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Câu Trước</span>
+                </button>
+
+                <button
+                  disabled={currentQIndex >= preparedQuestions.length - 1}
+                  onClick={() =>
+                    setCurrentQIndex((i) => Math.min(preparedQuestions.length - 1, i + 1))
+                  }
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold disabled:opacity-30 disabled:hover:bg-indigo-600 transition"
+                >
+                  <span>Câu Sau</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right 1 Column: Question Palette Navigation */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm h-fit">
+          <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Bảng Câu Hỏi
+            </h3>
+            <span className="text-xs font-mono font-bold text-indigo-600">
+              {answeredCount}/{preparedQuestions.length} đã làm
+            </span>
+          </div>
+
+          {/* Palette Legend */}
+          <div className="flex flex-wrap gap-2 text-[10px] text-slate-500 mb-4">
+            <div className="flex items-center space-x-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span>Đã chọn</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-200"></span>
+              <span>Chưa làm</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+              <span>Đặt cờ</span>
+            </div>
+          </div>
+
+          {/* Question Grid */}
+          <div className="grid grid-cols-5 gap-2 max-h-96 overflow-y-auto p-1">
+            {preparedQuestions.map((q, idx) => {
+              const isAnswered = answers[q.id] !== undefined;
+              const isFlagged = flagged[q.id];
+              const isCurrent = currentQIndex === idx;
+
+              return (
+                <button
+                  key={q.id}
+                  onClick={() => setCurrentQIndex(idx)}
+                  className={`h-9 rounded-lg text-xs font-bold flex items-center justify-center relative transition-all ${
+                    isCurrent
+                      ? 'ring-2 ring-indigo-600 ring-offset-2'
+                      : ''
+                  } ${
+                    isAnswered
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span>{idx + 1}</span>
+                  {isFlagged && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border border-white" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Bottom Button */}
+          <div className="mt-5 pt-4 border-t border-slate-100">
+            <button
+              onClick={() => setIsSubmitModalOpen(true)}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center justify-center space-x-1.5"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Nộp Bài Thi Ngay</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal Before Submit */}
+      {isSubmitModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+            <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-6 h-6 text-indigo-600" />
+            </div>
+
+            <h3 className="text-base font-bold text-slate-800 text-center mb-1">
+              Xác Nhận Nộp Bài Thi
+            </h3>
+            <p className="text-xs text-slate-500 text-center mb-4">
+              Bạn có chắc chắn muốn kết thúc bài thi không?
+            </p>
+
+            <div className="bg-slate-50 rounded-xl p-3 mb-5 space-y-1.5 text-xs text-slate-700">
+              <div className="flex justify-between">
+                <span>Số câu đã hoàn thành:</span>
+                <strong className="text-emerald-600">
+                  {answeredCount} / {preparedQuestions.length} câu
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Số câu chưa trả lời:</span>
+                <strong className={preparedQuestions.length - answeredCount > 0 ? 'text-rose-600' : 'text-slate-600'}>
+                  {preparedQuestions.length - answeredCount} câu
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Thời gian còn lại:</span>
+                <strong className="font-mono text-indigo-600">{formatTime(secondsLeft)}</strong>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => setIsSubmitModalOpen(false)}
+                className="flex-1 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition"
+              >
+                Tiếp Tục Làm Bài
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalSubmit}
+                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-md shadow-emerald-600/20 transition"
+              >
+                Xác Nhận Nộp Bài
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
