@@ -6,6 +6,14 @@ const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: '',
   googleSheetWebhookUrl: '',
   adminPassword: 'admin',
+  firebaseConfig: {
+    apiKey: 'AIzaSyBmOyS2gjTgrPvObkRyuxgYM4kJzaJn9lA',
+    authDomain: 'mathonlinehieu99.firebaseapp.com',
+    projectId: 'mathonlinehieu99',
+    storageBucket: 'mathonlinehieu99.firebasestorage.app',
+    messagingSenderId: '',
+    appId: '',
+  },
 };
 
 const SAMPLE_STUDENTS: Student[] = [
@@ -125,12 +133,13 @@ let firebaseApp: FirebaseApp | null = null;
 let firestoreDb: Firestore | null = null;
 
 export const initFirebase = (config?: AppSettings['firebaseConfig']) => {
-  if (!config || !config.apiKey || !config.projectId) {
+  const cfg = config || DEFAULT_SETTINGS.firebaseConfig;
+  if (!cfg || !cfg.apiKey || !cfg.projectId) {
     return null;
   }
   try {
     if (getApps().length === 0) {
-      firebaseApp = initializeApp(config);
+      firebaseApp = initializeApp(cfg);
     } else {
       firebaseApp = getApps()[0];
     }
@@ -141,6 +150,9 @@ export const initFirebase = (config?: AppSettings['firebaseConfig']) => {
     return null;
   }
 };
+
+// Auto-initialize on module load
+initFirebase();
 
 // LocalStorage helpers
 export const getAppSettings = (): AppSettings => {
@@ -167,7 +179,22 @@ export const getExams = async (): Promise<Exam[]> => {
       const snap = await getDocs(collection(firestoreDb, 'exams'));
       const list: Exam[] = [];
       snap.forEach((doc) => list.push(doc.data() as Exam));
-      if (list.length > 0) return list;
+      if (list.length > 0) {
+        localStorage.setItem('math_quiz_exams', JSON.stringify(list));
+        return list;
+      } else {
+        // Seed default / existing local exams to Firestore
+        const raw = localStorage.getItem('math_quiz_exams');
+        const initialExams: Exam[] = raw ? JSON.parse(raw) : SAMPLE_EXAMS;
+        for (const ex of initialExams) {
+          try {
+            await setDoc(doc(firestoreDb, 'exams', ex.id), ex);
+          } catch (e) {
+            console.error('Error seeding exam:', e);
+          }
+        }
+        return initialExams;
+      }
     } catch (err) {
       console.warn('Firestore getExams failed, fallback to local', err);
     }
@@ -226,7 +253,22 @@ export const getStudents = async (): Promise<Student[]> => {
       const snap = await getDocs(collection(firestoreDb, 'students'));
       const list: Student[] = [];
       snap.forEach((doc) => list.push(doc.data() as Student));
-      if (list.length > 0) return list;
+      if (list.length > 0) {
+        localStorage.setItem('math_quiz_students', JSON.stringify(list));
+        return list;
+      } else {
+        // Seed default / existing local students to Firestore
+        const raw = localStorage.getItem('math_quiz_students');
+        const initialStudents: Student[] = raw ? JSON.parse(raw) : SAMPLE_STUDENTS;
+        for (const s of initialStudents) {
+          try {
+            await setDoc(doc(firestoreDb, 'students', s.id), s);
+          } catch (e) {
+            console.error('Error seeding student:', e);
+          }
+        }
+        return initialStudents;
+      }
     } catch (err) {
       console.warn('Firestore getStudents failed, fallback to local', err);
     }
