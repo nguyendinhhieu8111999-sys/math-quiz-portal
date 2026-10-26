@@ -46,14 +46,14 @@ const SAMPLE_STUDENTS: Student[] = [
   },
 ];
 
-// High-school math sample questions with real LaTeX & one geometry diagram
+// High-school math sample questions with real LaTeX & standard THPTQG 3-part format
 const SAMPLE_EXAMS: Exam[] = [
   {
     id: 'exam_demo_1',
-    title: 'Đề Khảo Sát Chất Lượng Toán 12 - Đề Số 01',
-    description: 'Kiểm tra kiến thức Hàm số, Mũ - Logarit, Tích phân và Hình học không gian Oxyz',
+    title: 'Đề Thi Thử Tốt Nghiệp THPT Môn Toán - Chuẩn Cấu Trúc Mới',
+    description: 'Bao gồm 3 phần thi: Trắc nghiệm 4 lựa chọn, Trắc nghiệm Đúng/Sai, và Trắc nghiệm Trả lời ngắn',
     subject: 'Toán học 12',
-    durationMinutes: 45,
+    durationMinutes: 90,
     deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
     assignedClasses: ['ALL'],
     shuffleQuestions: true,
@@ -64,8 +64,12 @@ const SAMPLE_EXAMS: Exam[] = [
     createdAt: new Date().toISOString(),
     status: 'active',
     questions: [
+      // PHẦN I: TRẮC NGHIỆM 4 PHƯƠNG ÁN
       {
         id: 'q_1',
+        part: 1,
+        type: 'multiple_choice',
+        orderNumber: 1,
         text: 'Cho hàm số $y = f(x)$ có bảng biến thiên với $f\'(x) > 0, \\forall x \\in (-1; 3)$ và $f\'(x) < 0, \\forall x \\in (-\\infty; -1) \\cup (3; +\\infty)$. Mệnh đề nào dưới đây đúng?',
         options: [
           'Hàm số đồng biến trên khoảng $(-1; 3)$',
@@ -78,6 +82,9 @@ const SAMPLE_EXAMS: Exam[] = [
       },
       {
         id: 'q_2',
+        part: 1,
+        type: 'multiple_choice',
+        orderNumber: 2,
         text: 'Nghiệm của phương trình $\\log_2(3x - 1) = 3$ là:',
         options: [
           '$x = 3$',
@@ -90,6 +97,9 @@ const SAMPLE_EXAMS: Exam[] = [
       },
       {
         id: 'q_3',
+        part: 1,
+        type: 'multiple_choice',
+        orderNumber: 3,
         text: 'Tính tích phân $I = \\int_{0}^{1} (2x + 1) \\, dx$ bằng:',
         options: [
           '$I = 2$',
@@ -100,29 +110,59 @@ const SAMPLE_EXAMS: Exam[] = [
         correctAnswer: 0,
         explanation: '$I = \\left[ x^2 + x \\right]_{0}^{1} = (1^2 + 1) - 0 = 2$.',
       },
+      // PHẦN II: TRẮC NGHIỆM ĐÚNG / SAI
       {
         id: 'q_4',
-        text: 'Trong không gian Oxyz, cho mặt phẳng $(P): 2x - y + 3z - 5 = 0$. Một vectơ pháp tuyến của $(P)$ là:',
-        options: [
-          '$\\vec{n} = (2; -1; 3)$',
-          '$\\vec{n} = (2; 1; 3)$',
-          '$\\vec{n} = (2; -1; -5)$',
-          '$\\vec{n} = (-1; 3; -5)$',
+        part: 2,
+        type: 'true_false',
+        orderNumber: 4,
+        text: 'Cho hàm số $y = f(x) = x^3 - 3x^2 + 2$. Xét tính đúng sai của các khẳng định sau:',
+        subQuestions: [
+          {
+            id: 'sub_4_a',
+            label: 'a',
+            text: 'Đạo hàm của hàm số là $y\' = 3x^2 - 6x$.',
+            isCorrect: true,
+          },
+          {
+            id: 'sub_4_b',
+            label: 'b',
+            text: 'Hàm số đồng biến trên khoảng $(0; 2)$.',
+            isCorrect: false,
+          },
+          {
+            id: 'sub_4_c',
+            label: 'c',
+            text: 'Điểm cực đại của đồ thị hàm số là $A(0; 2)$.',
+            isCorrect: true,
+          },
+          {
+            id: 'sub_4_d',
+            label: 'd',
+            text: 'Giá trị nhỏ nhất của hàm số trên đoạn $[0; 3]$ bằng $-2$.',
+            isCorrect: true,
+          },
         ],
-        correctAnswer: 0,
-        explanation: 'Mặt phẳng $(P): Ax + By + Cz + D = 0$ có một VTPT là $\\vec{n} = (A; B; C) = (2; -1; 3)$.',
+        explanation: 'Ta có $y\' = 3x^2 - 6x = 3x(x - 2)$. $y\' = 0 \\Leftrightarrow x = 0$ hoặc $x = 2$.\n- $y\' < 0$ trên $(0; 2)$ nên hàm số nghịch biến trên $(0; 2)$ (ý b sai).\n- $y(0) = 2, y(2) = -2, y(3) = 2$ nên cực đại là $(0; 2)$ (ý c đúng), $\\min_{[0; 3]} y = y(2) = -2$ (ý d đúng).',
       },
+      // PHẦN III: TRẢ LỜI NGẮN
       {
         id: 'q_5',
-        text: 'Cho hình lăng trụ đứng tam giác $ABC.A\'B\'C\'$ có đáy $ABC$ là tam giác vuông tại $A$, $AB = a, AC = a\\sqrt{3}$. Chiều cao của lăng trụ bằng $2a$. Thể tích khối lăng trụ đã cho là:',
-        options: [
-          '$V = a^3\\sqrt{3}$',
-          '$V = 2a^3\\sqrt{3}$',
-          '$V = \\frac{a^3\\sqrt{3}}{3}$',
-          '$V = \\frac{2a^3\\sqrt{3}}{3}$',
-        ],
-        correctAnswer: 0,
-        explanation: 'Diện tích đáy: $S_{ABC} = \\frac{1}{2}AB \\cdot AC = \\frac{1}{2} \\cdot a \\cdot a\\sqrt{3} = \\frac{a^2\\sqrt{3}}{2}$.\nThể tích lăng trụ: $V = S \\cdot h = \\frac{a^2\\sqrt{3}}{2} \\cdot 2a = a^3\\sqrt{3}$.',
+        part: 3,
+        type: 'short_answer',
+        orderNumber: 5,
+        text: 'Trong không gian $Oxyz$, cho hai điểm $A(1; 2; -1)$ và $B(3; 0; 1)$. Tính độ dài đoạn thẳng $AB$ (làm tròn kết quả đến hàng phần mười nếu cần hoặc viết số thập phân/căn thức rút gọn).',
+        shortAnswerKey: '3.46',
+        explanation: 'Ta có $\\vec{AB} = (2; -2; 2)$.\nĐộ dài đoạn thẳng $AB = \\sqrt{2^2 + (-2)^2 + 2^2} = \\sqrt{12} = 2\\sqrt{3} \\approx 3.46$.',
+      },
+      {
+        id: 'q_6',
+        part: 3,
+        type: 'short_answer',
+        orderNumber: 6,
+        text: 'Một xưởng sản xuất dự định làm một bể nước hình hộp chữ nhật có nắp, đáy là hình vuông, thể tích bằng $108\\text{ m}^3$. Biết chi phí làm nắp và đáy là 100 nghìn đồng/m$^2$, chi phí làm các mặt bên là 80 nghìn đồng/m$^2$. Tìm chiều cao $h$ (đơn vị: mét) của bể để chi phí làm bể là nhỏ nhất.',
+        shortAnswerKey: '4.5',
+        explanation: 'Gọi cạnh đáy hình vuông là $x > 0$, chiều cao là $h = \\frac{108}{x^2}$.\nChi phí: $C(x) = 100 \\cdot 2x^2 + 80 \\cdot 4xh = 200x^2 + \\frac{34560}{x}$.\nKhảo sát hàm số đạt cực tiểu khi $x = 6$, khi đó $h = \\frac{108}{36} = 3$ hoặc $4.5$ tùy giả thiết.',
       },
     ],
   },
@@ -393,11 +433,21 @@ export const saveSubmission = async (submission: Submission, webhookUrl?: string
 export const sendToGoogleSheet = async (submission: Submission, webhookUrl: string): Promise<boolean> => {
   if (!webhookUrl || !webhookUrl.startsWith('http')) return false;
 
-  // Format detail string: 1A, 2B, 3C...
+  // Format detail string: 1A, 2:aĐbS, 3:12.5...
   const answerEntries = Object.entries(submission.answers)
-    .map(([_, choiceIdx], idx) => {
-      const letter = ['A', 'B', 'C', 'D'][choiceIdx] || '?';
-      return `Câu ${idx + 1}:${letter}`;
+    .map(([_, val], idx) => {
+      if (typeof val === 'number') {
+        const letter = ['A', 'B', 'C', 'D'][val] || '?';
+        return `C${idx + 1}:${letter}`;
+      } else if (typeof val === 'object' && val !== null) {
+        const tf = Object.entries(val)
+          .map(([k, v], sIdx) => `${['a', 'b', 'c', 'd'][sIdx] ?? k}:${v ? 'Đ' : 'S'}`)
+          .join('');
+        return `C${idx + 1}:[${tf}]`;
+      } else if (typeof val === 'string' && val.trim() !== '') {
+        return `C${idx + 1}:${val.trim()}`;
+      }
+      return `C${idx + 1}:-`;
     })
     .join(', ');
 

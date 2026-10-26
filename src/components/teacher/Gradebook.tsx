@@ -14,6 +14,7 @@ import {
   BarChart3,
   X,
   ExternalLink,
+  Check,
 } from 'lucide-react';
 
 interface GradebookProps {
@@ -373,37 +374,41 @@ export const Gradebook: React.FC<GradebookProps> = ({
             <div className="p-6 overflow-y-auto space-y-5 flex-1">
               {inspectedExam ? (
                 inspectedExam.questions.map((q, qIdx) => {
+                  const qType = q.type || 'multiple_choice';
                   const studentAns = inspectingSub.answers[q.id];
-                  const isCorrect = studentAns === q.correctAnswer;
-                  const answered = studentAns !== undefined;
+                  const earned = inspectingSub.questionScores?.[q.id];
 
                   return (
                     <div
                       key={q.id}
-                      className={`p-4 rounded-xl border ${
-                        isCorrect
-                          ? 'border-emerald-200 bg-emerald-50/20'
-                          : answered
-                          ? 'border-rose-200 bg-rose-50/20'
-                          : 'border-slate-200 bg-slate-50/40'
-                      }`}
+                      className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2.5"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-xs bg-slate-800 text-white px-2 py-0.5 rounded">
-                          Câu {qIdx + 1}
-                        </span>
-                        {isCorrect ? (
-                          <span className="inline-flex items-center space-x-1 text-xs font-bold text-emerald-600">
-                            <CheckCircle className="w-4 h-4" />
-                            <span>Đúng (+{(10 / inspectedExam.questions.length).toFixed(2)}đ)</span>
+                      <div className="flex flex-wrap items-center justify-between mb-2 gap-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-xs bg-slate-800 text-white px-2 py-0.5 rounded">
+                            Câu {qIdx + 1}
                           </span>
-                        ) : answered ? (
-                          <span className="inline-flex items-center space-x-1 text-xs font-bold text-rose-600">
-                            <XCircle className="w-4 h-4" />
-                            <span>Sai (Chọn {['A', 'B', 'C', 'D'][studentAns]})</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${
+                              qType === 'multiple_choice'
+                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                : qType === 'true_false'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}
+                          >
+                            {qType === 'multiple_choice'
+                              ? 'Phần I'
+                              : qType === 'true_false'
+                              ? 'Phần II: Đúng / Sai'
+                              : 'Phần III: Trả lời ngắn'}
                           </span>
-                        ) : (
-                          <span className="text-xs font-medium text-slate-400">Chưa làm</span>
+                        </div>
+
+                        {earned !== undefined && (
+                          <span className="text-xs font-mono font-bold text-emerald-600">
+                            +{earned.toFixed(2)}đ
+                          </span>
                         )}
                       </div>
 
@@ -417,33 +422,92 @@ export const Gradebook: React.FC<GradebookProps> = ({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
-                        {q.options.map((opt, optIdx) => {
-                          const isStudentSelected = studentAns === optIdx;
-                          const isKey = q.correctAnswer === optIdx;
-                          return (
-                            <div
-                              key={optIdx}
-                              className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
-                                isKey
-                                  ? 'bg-emerald-100/70 border-emerald-400 font-bold text-emerald-900'
-                                  : isStudentSelected
-                                  ? 'bg-rose-100/70 border-rose-400 font-bold text-rose-900'
-                                  : 'bg-white border-slate-200 text-slate-600'
-                              }`}
-                            >
-                              <div className="flex items-center space-x-1.5">
-                                <span className="font-mono">{['A', 'B', 'C', 'D'][optIdx]}.</span>
-                                <MathRenderer content={opt} inline />
+                      {/* Part I: Multiple Choice */}
+                      {qType === 'multiple_choice' && q.options && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                          {q.options.map((opt, optIdx) => {
+                            const isStudentSelected = studentAns === optIdx;
+                            const isKey = q.correctAnswer === optIdx;
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`p-2 rounded-lg border text-xs flex items-center justify-between ${
+                                  isKey
+                                    ? 'bg-emerald-100/70 border-emerald-400 font-bold text-emerald-900'
+                                    : isStudentSelected
+                                    ? 'bg-rose-100/70 border-rose-400 font-bold text-rose-900'
+                                    : 'bg-white border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="font-mono">{['A', 'B', 'C', 'D'][optIdx]}.</span>
+                                  <MathRenderer content={opt} inline />
+                                </div>
+                                {isKey && <span className="text-[10px] text-emerald-700 font-semibold">[Đáp án đúng]</span>}
+                                {isStudentSelected && !isKey && (
+                                  <span className="text-[10px] text-rose-700 font-semibold">[Học sinh chọn]</span>
+                                )}
                               </div>
-                              {isKey && <span className="text-[10px] text-emerald-700 font-semibold">[Đáp án đúng]</span>}
-                              {isStudentSelected && !isKey && (
-                                <span className="text-[10px] text-rose-700 font-semibold">[Học sinh chọn]</span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Part II: True / False */}
+                      {qType === 'true_false' && q.subQuestions && (
+                        <div className="border border-slate-200 rounded-lg overflow-hidden mt-2 text-xs">
+                          <table className="w-full text-left">
+                            <thead className="bg-slate-50 font-bold text-[11px] text-slate-600 border-b border-slate-200">
+                              <tr>
+                                <th className="p-2 w-10 text-center">Ý</th>
+                                <th className="p-2">Khẳng định</th>
+                                <th className="p-2 w-24 text-center">HS chọn</th>
+                                <th className="p-2 w-24 text-center">Đáp án</th>
+                                <th className="p-2 w-14 text-center">K.Quả</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {q.subQuestions.map((sub) => {
+                                const userChoice = (studentAns as Record<string, boolean>)?.[sub.id];
+                                const isSubCorrect = userChoice === sub.isCorrect;
+                                return (
+                                  <tr key={sub.id}>
+                                    <td className="p-2 text-center font-bold">{sub.label})</td>
+                                    <td className="p-2"><MathRenderer content={sub.text} /></td>
+                                    <td className="p-2 text-center font-bold">
+                                      {userChoice === true ? <span className="text-emerald-700">ĐÚNG</span> : userChoice === false ? <span className="text-rose-700">SAI</span> : <span className="text-slate-400">-</span>}
+                                    </td>
+                                    <td className="p-2 text-center font-bold">
+                                      {sub.isCorrect ? <span className="text-emerald-700">ĐÚNG</span> : <span className="text-rose-700">SAI</span>}
+                                    </td>
+                                    <td className="p-2 text-center">
+                                      {isSubCorrect ? <Check className="w-3.5 h-3.5 text-emerald-600 mx-auto" /> : <span className="text-rose-500 font-bold">✕</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Part III: Short Answer */}
+                      {qType === 'short_answer' && (
+                        <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 mt-2 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-slate-500 mr-2">Học sinh nhập:</span>
+                            <strong className="font-mono bg-white px-2 py-0.5 border rounded">
+                              {studentAns !== undefined && String(studentAns).trim() !== '' ? studentAns : '(Bỏ trống)'}
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="text-emerald-700 mr-2">Đáp án:</span>
+                            <strong className="font-mono bg-emerald-100 text-emerald-900 px-2 py-0.5 border border-emerald-300 rounded">
+                              {q.shortAnswerKey || '-'}
+                            </strong>
+                          </div>
+                        </div>
+                      )}
 
                       {q.explanation && (
                         <div className="mt-3 p-2.5 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-900">
