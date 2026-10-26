@@ -4,6 +4,7 @@ import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, Firestore } 
 
 const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: '',
+  geminiModel: 'gemini-3.8-pro',
   googleSheetWebhookUrl: '',
   adminPassword: 'admin',
   firebaseConfig: {

@@ -82,6 +82,7 @@ export interface Submission {
 
 export interface AppSettings {
   geminiApiKey: string;
+  geminiModel?: string; // 'gemini-3.8-pro' | 'gemini-3.8-flash'
   googleSheetWebhookUrl: string;
   adminPassword: string;
   firebaseConfig?: {

@@ -29,6 +29,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSave,
 }) => {
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || '');
+  const [geminiModel, setGeminiModel] = useState(settings.geminiModel || 'gemini-3.8-pro');
   const [googleSheetWebhookUrl, setGoogleSheetWebhookUrl] = useState(
     settings.googleSheetWebhookUrl || ''
   );
@@ -60,11 +61,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
 
     setIsTestingGemini(true);
-    setTestGeminiStatus('Đang kiểm tra kết nối API...');
+    setTestGeminiStatus(`Đang kiểm tra kết nối API (${geminiModel})...`);
 
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiApiKey.trim()}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey.trim()}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -75,10 +76,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       );
 
       if (res.ok) {
-        setTestGeminiStatus('✅ Kết nối Gemini API thành công!');
+        setTestGeminiStatus(`✅ Kết nối mô hình ${geminiModel} thành công!`);
       } else {
         const err = await res.json().catch(() => ({}));
-        setTestGeminiStatus(`❌ Lỗi kết nối: ${err.error?.message || res.statusText}`);
+        setTestGeminiStatus(`❌ Lỗi kết nối (${geminiModel}): ${err.error?.message || res.statusText}`);
       }
     } catch (e: any) {
       setTestGeminiStatus(`❌ Lỗi mạng: ${e.message}`);
@@ -149,6 +150,7 @@ function doPost(e) {
   const handleSaveAll = () => {
     const newSettings: AppSettings = {
       geminiApiKey: geminiApiKey.trim(),
+      geminiModel: geminiModel,
       googleSheetWebhookUrl: googleSheetWebhookUrl.trim(),
       adminPassword: adminPassword.trim() || 'admin',
       firebaseConfig: firebaseApiKey
@@ -228,6 +230,60 @@ function doPost(e) {
               >
                 {isTestingGemini ? 'Đang thử...' : 'Kiểm Tra Key'}
               </button>
+            </div>
+
+            {/* Model Selection */}
+            <div className="pt-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Mô Hình AI Mặc Định (Model):
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGeminiModel('gemini-3.8-pro')}
+                  className={`p-3 rounded-xl border text-left flex flex-col transition relative ${
+                    geminiModel === 'gemini-3.8-pro'
+                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold flex items-center space-x-1">
+                      <span>👑</span>
+                      <span>Gemini 3.8 Pro</span>
+                    </span>
+                    {geminiModel === 'gemini-3.8-pro' && (
+                      <span className="text-[10px] bg-indigo-600 text-white font-bold px-1.5 py-0.5 rounded">Đang chọn</span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-500 leading-tight">
+                    Khuyên dùng cho Toán học. Suy luận logic cao cấp, chuẩn công thức LaTeX và 3 phần thi.
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGeminiModel('gemini-3.8-flash')}
+                  className={`p-3 rounded-xl border text-left flex flex-col transition relative ${
+                    geminiModel === 'gemini-3.8-flash'
+                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold flex items-center space-x-1">
+                      <span>⚡</span>
+                      <span>Gemini 3.8 Flash</span>
+                    </span>
+                    {geminiModel === 'gemini-3.8-flash' && (
+                      <span className="text-[10px] bg-indigo-600 text-white font-bold px-1.5 py-0.5 rounded">Đang chọn</span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-500 leading-tight">
+                    Tốc độ xử lý siêu tốc, phù hợp với đề thi ngắn hoặc trắc nghiệm cơ bản.
+                  </span>
+                </button>
+              </div>
             </div>
 
             {testGeminiStatus && (
