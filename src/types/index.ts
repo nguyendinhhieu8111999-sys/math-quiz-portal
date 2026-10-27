@@ -82,7 +82,8 @@ export interface Submission {
 
 export interface AppSettings {
   geminiApiKey: string;
-  geminiModel?: string; // 'gemini-3.8-pro' | 'gemini-3.8-flash'
+  geminiModel?: string; // 'gemini-3.8-pro' | 'gemini-3.8-flash' | 'gemini-2.5-flash' | ...
+  autoFallbackGemini?: boolean; // Tự động chuyển mô hình khi quá tải
   googleSheetWebhookUrl: string;
   adminPassword: string;
   firebaseConfig?: {

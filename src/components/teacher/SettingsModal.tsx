@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AppSettings } from '../../types';
+import { AVAILABLE_GEMINI_MODELS, isHighDemandError } from '../../services/gemini';
 import {
   Settings,
   Sparkles,
@@ -13,6 +14,7 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -30,6 +32,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || '');
   const [geminiModel, setGeminiModel] = useState(settings.geminiModel || 'gemini-3.8-pro');
+  const [autoFallbackGemini, setAutoFallbackGemini] = useState(settings.autoFallbackGemini ?? true);
   const [googleSheetWebhookUrl, setGoogleSheetWebhookUrl] = useState(
     settings.googleSheetWebhookUrl || ''
   );
@@ -79,7 +82,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setTestGeminiStatus(`✅ Kết nối mô hình ${geminiModel} thành công!`);
       } else {
         const err = await res.json().catch(() => ({}));
-        setTestGeminiStatus(`❌ Lỗi kết nối (${geminiModel}): ${err.error?.message || res.statusText}`);
+        const msg = err.error?.message || res.statusText;
+        if (isHighDemandError(res.status, msg)) {
+          setTestGeminiStatus(
+            `⚠️ Mô hình ${geminiModel} đang có lượng truy cập cao (High Demand) trên Google. API Key của bạn hoàn toàn hợp lệ! Bạn có thể chọn mô hình Flash hoặc bật chế độ tự động chuyển đổi bên dưới.`
+          );
+        } else {
+          setTestGeminiStatus(`❌ Lỗi kết nối (${geminiModel}): ${msg}`);
+        }
       }
     } catch (e: any) {
       setTestGeminiStatus(`❌ Lỗi mạng: ${e.message}`);
@@ -151,6 +161,7 @@ function doPost(e) {
     const newSettings: AppSettings = {
       geminiApiKey: geminiApiKey.trim(),
       geminiModel: geminiModel,
+      autoFallbackGemini: autoFallbackGemini,
       googleSheetWebhookUrl: googleSheetWebhookUrl.trim(),
       adminPassword: adminPassword.trim() || 'admin',
       firebaseConfig: firebaseApiKey
@@ -233,57 +244,90 @@ function doPost(e) {
             </div>
 
             {/* Model Selection */}
-            <div className="pt-2">
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Mô Hình AI Mặc Định (Model):
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setGeminiModel('gemini-3.8-pro')}
-                  className={`p-3 rounded-xl border text-left flex flex-col transition relative ${
-                    geminiModel === 'gemini-3.8-pro'
-                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20'
-                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold flex items-center space-x-1">
-                      <span>👑</span>
-                      <span>Gemini 3.8 Pro</span>
-                    </span>
-                    {geminiModel === 'gemini-3.8-pro' && (
-                      <span className="text-[10px] bg-indigo-600 text-white font-bold px-1.5 py-0.5 rounded">Đang chọn</span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 leading-tight">
-                    Khuyên dùng cho Toán học. Suy luận logic cao cấp, chuẩn công thức LaTeX và 3 phần thi.
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setGeminiModel('gemini-3.8-flash')}
-                  className={`p-3 rounded-xl border text-left flex flex-col transition relative ${
-                    geminiModel === 'gemini-3.8-flash'
-                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20'
-                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold flex items-center space-x-1">
-                      <span>⚡</span>
-                      <span>Gemini 3.8 Flash</span>
-                    </span>
-                    {geminiModel === 'gemini-3.8-flash' && (
-                      <span className="text-[10px] bg-indigo-600 text-white font-bold px-1.5 py-0.5 rounded">Đang chọn</span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-slate-500 leading-tight">
-                    Tốc độ xử lý siêu tốc, phù hợp với đề thi ngắn hoặc trắc nghiệm cơ bản.
-                  </span>
-                </button>
+            <div className="pt-2 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Mô Hình AI Mặc Định (Model):
+                </label>
+                <span className="text-[11px] text-slate-400">Nhiều phiên bản dự phòng</span>
               </div>
+
+              {/* Dropdown with all versions */}
+              <div>
+                <select
+                  value={AVAILABLE_GEMINI_MODELS.some((m) => m.id === geminiModel) ? geminiModel : 'custom'}
+                  onChange={(e) => {
+                    if (e.target.value !== 'custom') {
+                      setGeminiModel(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                >
+                  <optgroup label="🌟 Thế Hệ 3.8 (Mới Nhất)">
+                    <option value="gemini-3.8-pro">👑 Gemini 3.8 Pro - Thông minh nhất cho Toán & Đề 3 phần</option>
+                    <option value="gemini-3.8-flash">⚡ Gemini 3.8 Flash - Cực nhanh & Ít quá tải máy chủ</option>
+                    <option value="gemini-3.8-flash-lite">🍃 Gemini 3.8 Flash Lite - Siêu nhẹ, chống nghẽn tải</option>
+                  </optgroup>
+                  <optgroup label="🛡️ Thế Hệ 2.5 (Ổn Định Cao)">
+                    <option value="gemini-2.5-flash">🛡️ Gemini 2.5 Flash - Tốc độ cao, tỷ lệ nghẽn thấp</option>
+                    <option value="gemini-2.5-pro">🧠 Gemini 2.5 Pro - Suy luận logic chi tiết</option>
+                  </optgroup>
+                  <optgroup label="📦 Thế Hệ 1.5 & 2.0 (Kinh Điển - Chống Quá Tải Tuyệt Đối)">
+                    <option value="gemini-1.5-flash">📦 Gemini 1.5 Flash - Hạ tầng rộng lớn, không lo quá tải</option>
+                    <option value="gemini-2.0-flash">🚀 Gemini 2.0 Flash - Tốc độ cao thế hệ 2.0</option>
+                    <option value="gemini-1.5-pro">📚 Gemini 1.5 Pro - Xử lý ngữ cảnh lớn</option>
+                  </optgroup>
+                  <optgroup label="Khác">
+                    <option value="custom">✏️ Nhập model tùy chỉnh khác...</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Custom input if custom */}
+              {(!AVAILABLE_GEMINI_MODELS.some((m) => m.id === geminiModel) || geminiModel === 'custom') && (
+                <div className="pt-1">
+                  <input
+                    type="text"
+                    value={geminiModel === 'custom' ? '' : geminiModel}
+                    onChange={(e) => setGeminiModel(e.target.value.trim())}
+                    placeholder="Nhập tên mã model Google AI Studio..."
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono"
+                  />
+                </div>
+              )}
+
+              {/* Description card */}
+              {(() => {
+                const info = AVAILABLE_GEMINI_MODELS.find((m) => m.id === geminiModel);
+                return info ? (
+                  <div className="p-2.5 rounded-lg bg-indigo-50/70 border border-indigo-100 text-xs text-indigo-900 flex items-start space-x-2">
+                    <span className="text-sm shrink-0">💡</span>
+                    <div>
+                      <span className="font-bold">{info.badge}:</span>{' '}
+                      <span className="text-slate-600">{info.desc}</span>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Auto Fallback Toggle */}
+              <label className="flex items-start space-x-2.5 p-3 rounded-xl border border-emerald-200 bg-emerald-50/50 cursor-pointer hover:bg-emerald-50 transition">
+                <input
+                  type="checkbox"
+                  checked={autoFallbackGemini}
+                  onChange={(e) => setAutoFallbackGemini(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded border-emerald-300 mt-0.5 focus:ring-emerald-500"
+                />
+                <div>
+                  <div className="text-xs font-bold text-emerald-900 flex items-center space-x-1.5">
+                    <span>🛡️ Tự động chuyển sang mô hình ổn định hơn khi máy chủ quá tải</span>
+                    <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded font-bold">Khuyên dùng</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 mt-0.5 leading-relaxed">
+                    Nếu model bạn chọn (như Gemini 3.8 Pro) gặp lỗi quá tải máy chủ (High demand / 503), hệ thống sẽ tự động dùng Gemini Flash hoặc 1.5 Flash để bóc tách ngay mà không báo lỗi gián đoạn.
+                  </p>
+                </div>
+              </label>
             </div>
 
             {testGeminiStatus && (

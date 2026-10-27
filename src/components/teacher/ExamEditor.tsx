@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { Exam, Question, QuestionType, TrueFalseItem, AppSettings } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
 import { PdfSnipper } from './PdfSnipper';
-import { extractQuestionsFromPdf } from '../../services/gemini';
+import {
+  extractQuestionsFromPdf,
+  AVAILABLE_GEMINI_MODELS,
+  getFallbackModels,
+} from '../../services/gemini';
 import {
   Sparkles,
   Upload,
@@ -21,6 +25,8 @@ import {
   ListFilter,
   CheckSquare,
   HelpCircle,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ExamEditorProps {
@@ -81,7 +87,9 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>(settings.geminiModel || 'gemini-3.8-pro');
+  const [autoFallback, setAutoFallback] = useState<boolean>(settings.autoFallbackGemini ?? true);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
+  const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuccessMsg, setAiSuccessMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
@@ -114,7 +122,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
   };
 
   // Run Gemini AI extraction
-  const handleRunAiExtraction = async () => {
+  const handleRunAiExtraction = async (modelToUseOverride?: string) => {
     if (!pdfBase64) {
       alert('Vui lòng chọn file PDF trước!');
       return;
@@ -125,19 +133,40 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
       return;
     }
 
+    const modelToRun = modelToUseOverride || selectedModel;
+    if (modelToUseOverride) {
+      setSelectedModel(modelToUseOverride);
+    }
+
     setIsExtracting(true);
     setAiError(null);
     setAiSuccessMsg(null);
+    setExtractionStatus(`Đang kết nối tới ${modelToRun}...`);
 
     try {
-      const res = await extractQuestionsFromPdf(pdfBase64, settings.geminiApiKey, selectedModel);
+      const res = await extractQuestionsFromPdf(
+        pdfBase64,
+        settings.geminiApiKey,
+        modelToRun,
+        autoFallback,
+        (statusText) => setExtractionStatus(statusText)
+      );
+
       if (res.success && res.questions && res.questions.length > 0) {
         setQuestions(res.questions);
         const p1 = res.questions.filter(q => (q.type || 'multiple_choice') === 'multiple_choice').length;
         const p2 = res.questions.filter(q => q.type === 'true_false').length;
         const p3 = res.questions.filter(q => q.type === 'short_answer').length;
-        const modelLabel = selectedModel.includes('pro') ? 'Gemini 3.8 Pro' : 'Gemini 3.8 Flash';
-        setAiSuccessMsg(`Đã trích xuất thành công ${res.questions.length} câu hỏi bằng ${modelLabel}! (Phần I: ${p1} câu, Phần II: ${p2} câu, Phần III: ${p3} câu)`);
+        
+        if (res.wasFallback) {
+          setAiSuccessMsg(
+            `Đã bóc tách thành công ${res.questions.length} câu hỏi! (⚡ Máy chủ ${res.originalModel} bận, hệ thống đã tự động chuyển sang ${res.usedModel} hoàn tất)`
+          );
+        } else {
+          setAiSuccessMsg(
+            `Đã trích xuất thành công ${res.questions.length} câu hỏi bằng ${res.usedModel}! (Phần I: ${p1} câu, Phần II: ${p2} câu, Phần III: ${p3} câu)`
+          );
+        }
       } else {
         setAiError(res.error || 'Không thể trích xuất câu hỏi từ file PDF này.');
       }
@@ -145,6 +174,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
       setAiError(err.message || 'Lỗi xử lý file PDF.');
     } finally {
       setIsExtracting(false);
+      setExtractionStatus(null);
     }
   };
 
@@ -527,36 +557,44 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
               <span>Bóc Tách Đề THPT Quốc Gia Bằng Gemini AI</span>
             </h2>
 
-            <div className="flex items-center space-x-2">
-              {/* Quick Model Selector */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setSelectedModel('gemini-3.8-pro')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition flex items-center space-x-1 ${
-                    selectedModel === 'gemini-3.8-pro'
-                      ? 'bg-white text-indigo-700 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                  title="Gemini 3.8 Pro: Mô hình thông minh nhất, giải và bóc tách công thức Toán cực chuẩn"
-                >
-                  <span>👑</span>
-                  <span>Gemini Pro</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedModel('gemini-3.8-flash')}
-                  className={`px-2.5 py-1 rounded-md font-semibold transition flex items-center space-x-1 ${
-                    selectedModel === 'gemini-3.8-flash'
-                      ? 'bg-white text-indigo-700 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                  title="Gemini 3.8 Flash: Tốc độ phản hồi siêu nhanh"
-                >
-                  <span>⚡</span>
-                  <span>Gemini Flash</span>
-                </button>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Auto Fallback Button */}
+              <button
+                type="button"
+                onClick={() => setAutoFallback(!autoFallback)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition flex items-center space-x-1 border ${
+                  autoFallback
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                }`}
+                title="Tự động chuyển mô hình dự phòng khi máy chủ Google quá tải (High demand)"
+              >
+                <ShieldCheck className={`w-3.5 h-3.5 ${autoFallback ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <span className="hidden sm:inline">Chống quá tải:</span>
+                <span className="font-bold">{autoFallback ? 'BẬT' : 'TẮT'}</span>
+              </button>
+
+              {/* Version Selector Dropdown */}
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              >
+                <optgroup label="Thế Hệ 3.8 (Mới Nhất)">
+                  <option value="gemini-3.8-pro">👑 Gemini 3.8 Pro (Toán học)</option>
+                  <option value="gemini-3.8-flash">⚡ Gemini 3.8 Flash (Ít quá tải)</option>
+                  <option value="gemini-3.8-flash-lite">🍃 Flash Lite (Siêu nhẹ)</option>
+                </optgroup>
+                <optgroup label="Thế Hệ 2.5 (Ổn Định)">
+                  <option value="gemini-2.5-flash">🛡️ Gemini 2.5 Flash</option>
+                  <option value="gemini-2.5-pro">🧠 Gemini 2.5 Pro</option>
+                </optgroup>
+                <optgroup label="Thế Hệ 1.5 & 2.0 (Kinh Điển - Chống Nghẽn)">
+                  <option value="gemini-1.5-flash">📦 Gemini 1.5 Flash (Kinh điển)</option>
+                  <option value="gemini-2.0-flash">🚀 Gemini 2.0 Flash</option>
+                  <option value="gemini-1.5-pro">📚 Gemini 1.5 Pro</option>
+                </optgroup>
+              </select>
 
               {!settings.geminiApiKey && (
                 <button
@@ -564,7 +602,7 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
                   className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-md font-medium hover:bg-amber-100 transition flex items-center space-x-1"
                 >
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Chưa nhập Gemini API Key</span>
+                  <span>Chưa nhập Key</span>
                 </button>
               )}
             </div>
@@ -585,26 +623,85 @@ export const ExamEditor: React.FC<ExamEditorProps> = ({
 
             {pdfFile && (
               <button
-                onClick={handleRunAiExtraction}
+                onClick={() => handleRunAiExtraction()}
                 disabled={isExtracting}
                 className="flex items-center space-x-2 px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 disabled:opacity-50 transition"
               >
                 <Sparkles className={`w-4 h-4 ${isExtracting ? 'animate-spin' : ''}`} />
                 <span>
                   {isExtracting
-                    ? `Đang phân tích bằng ${selectedModel.includes('pro') ? 'Gemini Pro' : 'Gemini Flash'}...`
-                    : `Tự Động Bóc Tách Đề (${selectedModel.includes('pro') ? '👑 Gemini Pro' : '⚡ Flash'})`}
+                    ? (extractionStatus || 'Đang bóc tách đề...')
+                    : `Tự Động Bóc Tách Đề (${
+                        selectedModel === 'gemini-3.8-pro'
+                          ? '👑 3.8 Pro'
+                          : selectedModel === 'gemini-3.8-flash'
+                          ? '⚡ 3.8 Flash'
+                          : selectedModel === 'gemini-3.8-flash-lite'
+                          ? '🍃 Flash Lite'
+                          : selectedModel === 'gemini-2.5-flash'
+                          ? '🛡️ 2.5 Flash'
+                          : selectedModel === 'gemini-1.5-flash'
+                          ? '📦 1.5 Flash'
+                          : selectedModel
+                      })`}
                 </span>
               </button>
             )}
           </div>
 
-          {/* AI Messages */}
+          {/* Realtime Extraction Status */}
+          {isExtracting && extractionStatus && (
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700 mb-3 flex items-center space-x-2 animate-pulse">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600 shrink-0" />
+              <span>{extractionStatus}</span>
+            </div>
+          )}
+
+          {/* AI Messages with 1-click fallback suggestions */}
           {aiError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 mb-3 flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-              <div>
-                <strong>Lỗi:</strong> {aiError}
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 mb-3 space-y-2.5">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <strong className="font-bold">Lỗi máy chủ:</strong> {aiError}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-rose-200/60">
+                <p className="font-bold text-rose-800 mb-1.5 flex items-center space-x-1">
+                  <span>👉</span>
+                  <span>Mô hình đang quá tải. Bấm để thử lại ngay với các phiên bản ít bị nghẽn hơn:</span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleRunAiExtraction('gemini-3.8-flash')}
+                    className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1"
+                  >
+                    <span>⚡ Gemini 3.8 Flash</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRunAiExtraction('gemini-3.8-flash-lite')}
+                    className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1"
+                  >
+                    <span>🍃 Flash Lite (Siêu nhẹ)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRunAiExtraction('gemini-2.5-flash')}
+                    className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1"
+                  >
+                    <span>🛡️ Gemini 2.5 Flash</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRunAiExtraction('gemini-1.5-flash')}
+                    className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1"
+                  >
+                    <span>📦 Gemini 1.5 Flash (Kinh điển)</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

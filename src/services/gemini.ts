@@ -1,16 +1,125 @@
 import { Question, QuestionType, TrueFalseItem } from '../types';
 
+export interface GeminiModelInfo {
+  id: string;
+  name: string;
+  badge: string;
+  desc: string;
+  tier: '3.8' | '2.5' | 'legacy';
+  isPopular?: boolean;
+}
+
+export const AVAILABLE_GEMINI_MODELS: GeminiModelInfo[] = [
+  {
+    id: 'gemini-3.8-pro',
+    name: 'Gemini 3.8 Pro',
+    badge: '👑 Thông minh nhất',
+    desc: 'Chính xác cao nhất cho Toán học, LaTeX và cấu trúc đề 3 phần THPTQG. Khi cao điểm có thể quá tải.',
+    tier: '3.8',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
+    badge: '⚡ Cực nhanh & Ít quá tải',
+    desc: 'Tốc độ phản hồi cao, ít bị nghẽn tải máy chủ, bóc tách đề thi mượt mà.',
+    tier: '3.8',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-3.8-flash-lite',
+    name: 'Gemini 3.8 Flash Lite',
+    badge: '🍃 Siêu nhẹ & Chống nghẽn',
+    desc: 'Bản rút gọn dung lượng siêu nhẹ, độ trễ thấp nhất, chịu tải cực tốt.',
+    tier: '3.8',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    badge: '🛡️ Thế hệ 2.5 ổn định',
+    desc: 'Thế hệ 2.5 tốc độ cao, phương án dự phòng tuyệt vời khi dòng 3.8 bận.',
+    tier: '2.5',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    badge: '🧠 Pro 2.5 tư duy sâu',
+    desc: 'Mô hình Pro thế hệ 2.5 với khả năng tư duy logic và suy luận toán học chi tiết.',
+    tier: '2.5',
+  },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    badge: '🚀 Thế hệ 2.0 nhanh',
+    desc: 'Mô hình thế hệ 2.0 tốc độ cao, tối ưu phân tích văn bản nhanh chóng.',
+    tier: 'legacy',
+  },
+  {
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
+    badge: '📦 Bản 1.5 kinh điển',
+    desc: 'Hạ tầng máy chủ rộng lớn kinh điển của Google, tỷ lệ quá tải gần như bằng 0.',
+    tier: 'legacy',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
+    badge: '📚 Bản 1.5 Pro lớn',
+    desc: 'Khả năng đọc hiểu tài liệu dài và xử lý ngữ cảnh sâu.',
+    tier: 'legacy',
+  },
+];
+
+export const getFallbackModels = (primaryModel: string): string[] => {
+  const fallbacks = [
+    'gemini-3.8-flash',
+    'gemini-3.8-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash',
+  ];
+  return fallbacks.filter((m) => m !== primaryModel);
+};
+
 export interface GeminiExtractionResult {
   success: boolean;
   questions?: Question[];
   rawText?: string;
   error?: string;
+  usedModel?: string;
+  wasFallback?: boolean;
+  originalModel?: string;
+  isHighDemand?: boolean;
+  suggestedModels?: string[];
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const isHighDemandError = (status: number, message: string): boolean => {
+  const m = (message || '').toLowerCase();
+  return (
+    status === 503 ||
+    status === 429 ||
+    m.includes('high demand') ||
+    m.includes('overloaded') ||
+    m.includes('resource exhausted') ||
+    m.includes('spikes in demand') ||
+    m.includes('temporarily unavailable') ||
+    m.includes('capacity') ||
+    m.includes('rate limit') ||
+    m.includes('quota')
+  );
+};
 
 export const extractQuestionsFromPdf = async (
   pdfBase64: string,
   apiKey: string,
-  modelName: string = 'gemini-3.8-pro'
+  modelName: string = 'gemini-3.8-pro',
+  enableAutoFallback: boolean = true,
+  onProgress?: (statusText: string) => void
 ): Promise<GeminiExtractionResult> => {
   if (!apiKey || apiKey.trim() === '') {
     return {
@@ -19,9 +128,10 @@ export const extractQuestionsFromPdf = async (
     };
   }
 
-  const selectedModel = modelName.trim() || 'gemini-3.8-pro';
-  // Model endpoint - Google AI Studio (gemini-3.8-pro / gemini-3.8-flash)
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey.trim()}`;
+  const primaryModel = modelName.trim() || 'gemini-3.8-pro';
+  const modelsToTry = enableAutoFallback
+    ? [primaryModel, ...getFallbackModels(primaryModel)]
+    : [primaryModel];
 
   const prompt = `
 Bạn là một chuyên gia khảo thí và số hóa đề thi Toán học Việt Nam theo cấu trúc mới nhất của Bộ Giáo dục & Đào tạo (chuẩn thi Tốt nghiệp THPT mới từ 2025 và truyền thống).
@@ -94,119 +204,167 @@ CHỈ TRẢ VỀ DUY NHẤT MÃ JSON HỢP LỆ THEO CẤU TRÚC SAU (không kè
 ]
 `;
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+  let lastError = '';
+  let hadHighDemand = false;
+
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const currentModel = modelsToTry[i];
+    const isFallback = currentModel !== primaryModel;
+
+    if (isFallback) {
+      onProgress?.(
+        `Mô hình ${primaryModel} bị quá tải. Đang tự động chuyển sang ${currentModel}...`
+      );
+    }
+
+    // Try up to 2 attempts per model (for temporary 1-2s spikes)
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey.trim()}`;
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
               {
-                text: prompt,
-              },
-              {
-                inlineData: {
-                  mimeType: 'application/pdf',
-                  data: pdfBase64,
-                },
+                parts: [
+                  {
+                    text: prompt,
+                  },
+                  {
+                    inlineData: {
+                      mimeType: 'application/pdf',
+                      data: pdfBase64,
+                    },
+                  },
+                ],
               },
             ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      }),
-    });
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: 'application/json',
+            },
+          }),
+        });
 
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}));
-      const msg = errJson.error?.message || `Lỗi máy chủ Google (${response.status})`;
-      return { success: false, error: msg };
-    }
+        if (!response.ok) {
+          const errJson = await response.json().catch(() => ({}));
+          const msg = errJson.error?.message || `Lỗi máy chủ Google (${response.status})`;
+          lastError = msg;
 
-    const data = await response.json();
-    const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (isHighDemandError(response.status, msg)) {
+            hadHighDemand = true;
+            if (attempt === 1) {
+              onProgress?.(
+                `Máy chủ ${currentModel} đang có lượng truy cập cao. Đang đợi 1.5s để thử lại...`
+              );
+              await sleep(1500);
+              continue;
+            }
+            // Attempt 2 still high demand -> break out to next fallback model
+            break;
+          } else {
+            // Not a high demand error (e.g. invalid API key, permission, or bad syntax)
+            return { success: false, error: msg, usedModel: currentModel };
+          }
+        }
 
-    if (!candidate) {
-      return { success: false, error: 'Không nhận được phản hồi nội dung từ Gemini.' };
-    }
+        const data = await response.json();
+        const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    // Parse JSON
-    let parsed: any;
-    try {
-      const cleaned = candidate.replace(/```json/g, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
-      return {
-        success: false,
-        rawText: candidate,
-        error: 'Lỗi định dạng dữ liệu trả về từ AI. Vui lòng thử lại.',
-      };
-    }
+        if (!candidate) {
+          lastError = 'Không nhận được phản hồi nội dung từ Gemini.';
+          break;
+        }
 
-    const questionsArray = Array.isArray(parsed) ? parsed : parsed.questions || [];
-    const sanitizedQuestions: Question[] = questionsArray.map((q: any, idx: number) => {
-      const qType: QuestionType =
-        q.type === 'true_false' || q.type === 'short_answer' ? q.type : 'multiple_choice';
-      
-      const part = q.part || (qType === 'multiple_choice' ? 1 : qType === 'true_false' ? 2 : 3);
-
-      let subQuestions: TrueFalseItem[] | undefined = undefined;
-      if (qType === 'true_false') {
-        const rawSubs = Array.isArray(q.subQuestions) ? q.subQuestions : [];
-        const labels = ['a', 'b', 'c', 'd'];
-        subQuestions = labels.map((lbl, sIdx) => {
-          const rawItem = rawSubs[sIdx] || {};
+        // Parse JSON
+        let parsed: any;
+        try {
+          const cleaned = candidate.replace(/```json/g, '').replace(/```/g, '').trim();
+          parsed = JSON.parse(cleaned);
+        } catch (parseErr) {
           return {
-            id: rawItem.id || `sub_${Date.now()}_${sIdx}`,
-            label: lbl,
-            text: rawItem.text || `Mệnh đề ${lbl}`,
-            isCorrect: Boolean(rawItem.isCorrect),
+            success: false,
+            rawText: candidate,
+            error: 'Lỗi định dạng dữ liệu trả về từ AI. Vui lòng thử lại.',
+            usedModel: currentModel,
+          };
+        }
+
+        const questionsArray = Array.isArray(parsed) ? parsed : parsed.questions || [];
+        const sanitizedQuestions: Question[] = questionsArray.map((q: any, idx: number) => {
+          const qType: QuestionType =
+            q.type === 'true_false' || q.type === 'short_answer' ? q.type : 'multiple_choice';
+
+          const part = q.part || (qType === 'multiple_choice' ? 1 : qType === 'true_false' ? 2 : 3);
+
+          let subQuestions: TrueFalseItem[] | undefined = undefined;
+          if (qType === 'true_false') {
+            const rawSubs = Array.isArray(q.subQuestions) ? q.subQuestions : [];
+            const labels = ['a', 'b', 'c', 'd'];
+            subQuestions = labels.map((lbl, sIdx) => {
+              const rawItem = rawSubs[sIdx] || {};
+              return {
+                id: rawItem.id || `sub_${Date.now()}_${sIdx}`,
+                label: lbl,
+                text: rawItem.text || `Mệnh đề ${lbl}`,
+                isCorrect: Boolean(rawItem.isCorrect),
+              };
+            });
+          }
+
+          return {
+            id: q.id || `q_${Date.now()}_${idx + 1}`,
+            part,
+            type: qType,
+            orderNumber: q.orderNumber || idx + 1,
+            text: q.text || `Câu hỏi ${idx + 1}`,
+            options:
+              qType === 'multiple_choice'
+                ? Array.isArray(q.options) && q.options.length === 4
+                  ? q.options
+                  : ['A', 'B', 'C', 'D']
+                : undefined,
+            correctAnswer:
+              qType === 'multiple_choice'
+                ? typeof q.correctAnswer === 'number' && q.correctAnswer >= 0 && q.correctAnswer <= 3
+                  ? q.correctAnswer
+                  : 0
+                : undefined,
+            subQuestions,
+            shortAnswerKey: qType === 'short_answer' ? String(q.shortAnswerKey ?? '').trim() : undefined,
+            explanation: q.explanation || '',
+            hasFigure: Boolean(q.hasFigure),
+            imageUrl: '',
           };
         });
+
+        return {
+          success: true,
+          questions: sanitizedQuestions,
+          rawText: candidate,
+          usedModel: currentModel,
+          wasFallback: isFallback,
+          originalModel: primaryModel,
+        };
+      } catch (err: any) {
+        lastError = err.message || 'Lỗi mạng khi kết nối Google AI Studio.';
+        if (attempt === 1) {
+          await sleep(1500);
+          continue;
+        }
       }
-
-      return {
-        id: q.id || `q_${Date.now()}_${idx + 1}`,
-        part,
-        type: qType,
-        orderNumber: q.orderNumber || idx + 1,
-        text: q.text || `Câu hỏi ${idx + 1}`,
-        options:
-          qType === 'multiple_choice'
-            ? Array.isArray(q.options) && q.options.length === 4
-              ? q.options
-              : ['A', 'B', 'C', 'D']
-            : undefined,
-        correctAnswer:
-          qType === 'multiple_choice'
-            ? typeof q.correctAnswer === 'number' && q.correctAnswer >= 0 && q.correctAnswer <= 3
-              ? q.correctAnswer
-              : 0
-            : undefined,
-        subQuestions,
-        shortAnswerKey: qType === 'short_answer' ? String(q.shortAnswerKey ?? '').trim() : undefined,
-        explanation: q.explanation || '',
-        hasFigure: Boolean(q.hasFigure),
-        imageUrl: '',
-      };
-    });
-
-    return {
-      success: true,
-      questions: sanitizedQuestions,
-      rawText: candidate,
-    };
-  } catch (err: any) {
-    console.error('Gemini API call failed:', err);
-    return {
-      success: false,
-      error: err.message || 'Lỗi kết nối tới Google AI Studio.',
-    };
+    }
   }
+
+  return {
+    success: false,
+    error: lastError || 'Mô hình đang quá tải hoặc không thể kết nối tới Google AI Studio.',
+    isHighDemand: hadHighDemand,
+    usedModel: primaryModel,
+    suggestedModels: getFallbackModels(primaryModel),
+  };
 };
